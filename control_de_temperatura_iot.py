@@ -1,8 +1,12 @@
 from datetime import datetime, timedelta
 from abc import ABC, abstractmethod
+import json
 import numpy as np
+from kafka import KafkaConsumer
+import time
 
 class ServidorSingleton:
+
     _unicaInstancia = None
 
     def __init__(self):
@@ -31,7 +35,7 @@ class DatosTemperatura:
         self.timestamp = timestamp
         self.temperatura = temperatura
 
-class Observador:
+class Observador:  # Implementación del patrón Observer y Manejador (Chain of responsability)
     def __init__(self, sucesor=None):
         self.sucesor = sucesor
 
@@ -41,6 +45,48 @@ class Observador:
 
     def actualizar(self):
         self.manejar_datos()
+    # Cuando se actualiza un dato se maneja, ya que cada nuevo valor de temperatura recibido debe de implicar la realización de una serie de pasos encadenados
+    
+class ManejadorCalculoEstadisticos(Observador):
+    def __init__(self, estrategia, sucesor=None):
+        super().__init__(sucesor)
+        self.estrategia = estrategia
+
+    def manejar_datos(self):
+        ahora = datetime.now()
+        hace_60_segundos = ahora - timedelta(seconds=60)
+        datos_recientes = list(filter(lambda x: x.timestamp >= hace_60_segundos, ServidorSingleton.obtenerInstancia().obtener_datos()))
+        temperaturas = list(map(lambda x: x.temperatura, datos_recientes))
+        
+        if temperaturas:
+            estadisticos = self.estrategia.calcular(temperaturas)
+            print(f"Estadísticas calculadas: {estadisticos}")
+        
+        super().manejar_datos()
+
+class ManejadorComprobarUmbral(Observador):
+    def __init__(self, umbral, sucesor=None):
+        super().__init__(sucesor)
+        self.umbral = umbral
+
+    def manejar_datos(self):
+        temperatura = ServidorSingleton.obtenerInstancia().obtener_datos()[-1].temperatura  # Extraemos la última medida de temperatura para comprobar el umbral
+        if temperatura > self.umbral:
+            print(f"La temperatura {temperatura} supera el umbral de {self.umbral}")
+        
+        super().manejar_datos()
+
+class ManejadorComprobarAumento(Observador):
+    def manejar_datos(self):
+        ahora = datetime.now()
+        hace_30_segundos = ahora - timedelta(seconds=30)
+        datos_recientes = list(filter(lambda x: x.timestamp >= hace_30_segundos, ServidorSingleton.obtenerInstancia().obtener_datos()))
+        temperaturas = list(map(lambda x: x.temperatura, datos_recientes))
+        
+        if len(temperaturas) > 1 and (temperaturas[-1] - temperaturas[0]) > 10:
+            print(f"La temperatura ha aumentado más de 10 grados en los últimos 30 segundos")
+        
+        super().manejar_datos()
 
 class EstrategiaEstadisticos(ABC):
     @abstractmethod
@@ -56,19 +102,20 @@ class EstrategiaMediaDesviacion(EstrategiaEstadisticos):
             "Desviación típica": desviacion
         }
 
-class ManejadorCalculoEstadisticos(Observador):
-    def __init__(self, estrategia, sucesor=None):
-        super().__init__(sucesor)
-        self.estrategia = estrategia
+class EstrategiaCuantiles(EstrategiaEstadisticos):
+    def calcular(self, temperaturas):
+        cuantiles = np.percentile(temperaturas, [25, 50, 75])
+        return {
+            "Percentil 25%": cuantiles[0],
+            "Percentil 50% (media)": cuantiles[1],
+            "Percentil 75%": cuantiles[2]
+        }
 
-    def manejar_datos(self):
-        ahora = datetime.now()
-        hace_60_segundos = ahora - timedelta(seconds=60)
-        datos_recientes = list(filter(lambda x: x.timestamp >= hace_60_segundos, ServidorSingleton.obtenerInstancia().obtener_datos()))
-        temperaturas = list(map(lambda x: x.temperatura, datos_recientes))
-
-        if temperaturas:
-            estadisticos = self.estrategia.calcular(temperaturas)
-            print(f"Estadísticas calculadas: {estadisticos}")
-
-        super().manejar_datos()
+class EstrategiaMinMax(EstrategiaEstadisticos):
+    def calcular(self, temperaturas):
+        min = np.min(temperaturas)
+        max = np.max(temperaturas)
+        return {
+            "Mínimo": min,
+            "Máximo": max
+        }
