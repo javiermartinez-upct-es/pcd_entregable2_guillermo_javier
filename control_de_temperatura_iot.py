@@ -1,4 +1,6 @@
 from datetime import datetime, timedelta
+from abc import ABC, abstractmethod
+import numpy as np
 
 class ServidorSingleton:
     _unicaInstancia = None
@@ -40,9 +42,24 @@ class Observador:
     def actualizar(self):
         self.manejar_datos()
 
+class EstrategiaEstadisticos(ABC):
+    @abstractmethod
+    def calcular(self, temperaturas):
+        pass
+
+class EstrategiaMediaDesviacion(EstrategiaEstadisticos):
+    def calcular(self, temperaturas):
+        media = np.mean(temperaturas)
+        desviacion = np.std(temperaturas)
+        return {
+            "Media": media,
+            "Desviación típica": desviacion
+        }
+
 class ManejadorCalculoEstadisticos(Observador):
-    def __init__(self, sucesor=None):
+    def __init__(self, estrategia, sucesor=None):
         super().__init__(sucesor)
+        self.estrategia = estrategia
 
     def manejar_datos(self):
         ahora = datetime.now()
@@ -51,7 +68,7 @@ class ManejadorCalculoEstadisticos(Observador):
         temperaturas = list(map(lambda x: x.temperatura, datos_recientes))
 
         if temperaturas:
-            media = sum(temperaturas) / len(temperaturas)
-            print(f"Media de las temperaturas: {media}")
+            estadisticos = self.estrategia.calcular(temperaturas)
+            print(f"Estadísticas calculadas: {estadisticos}")
 
         super().manejar_datos()
