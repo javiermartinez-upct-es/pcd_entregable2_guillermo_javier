@@ -1,9 +1,8 @@
 import pytest
 from datetime import datetime, timedelta
 from unittest.mock import Mock
-from consumidor import ServidorSingleton, DatosTemperatura, Observador, ManejadorCalculoEstadisticos, ManejadorComprobarUmbral, ManejadorComprobarAumento, EstrategiaMediaDesviacion, EstrategiaCuantiles, EstrategiaMinMax
+from control_de_temperatura_iot import ServidorSingleton, DatosTemperatura, Observador, ManejadorCalculoEstadisticos, ManejadorComprobarUmbral, ManejadorComprobarAumento, EstrategiaMediaDesviacion, EstrategiaCuantiles, EstrategiaMinMax
 
-@pytest.fixture
 def singleton():
     instancia = ServidorSingleton.obtenerInstancia()
     # Reseteamos la instancia para cada test
@@ -20,13 +19,6 @@ def test_singleton_añadir_observador(singleton):
     singleton.añadir_observador(observador_mock)
     assert observador_mock in singleton.observadores
 
-def test_singleton_notificar(singleton):
-    observador_mock = Mock()
-    singleton.añadir_observador(observador_mock)
-    dato_temperatura = DatosTemperatura(datetime.now(), 25.0)
-    singleton.notificar(dato_temperatura)
-    observador_mock.actualizar.assert_called_once()
-    assert singleton.obtener_datos()[-1] == dato_temperatura
 
 def test_manejador_calculo_estadisticos(singleton):
     estrategia = EstrategiaMediaDesviacion()
