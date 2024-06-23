@@ -26,8 +26,8 @@ class ServidorSingleton:
         self.observadores.append(observador)
 
     def notificar(self, datos):
-        self.datos.append(datos)
-        for observador in self.observadores:
+        self.datos.append(datos)  # Primero almacenamos los datos de temperatura
+        for observador in self.observadores:  # Luego notificamos a los observadores
             observador.actualizar()
 
 class DatosTemperatura:
@@ -119,3 +119,65 @@ class EstrategiaMinMax(EstrategiaEstadisticos):
             "Mínimo": min,
             "Máximo": max
         }
+
+class Consumidor:
+    def __init__(self, topico):
+        self.topico = topico
+        self.consumidor = KafkaConsumer(
+            self.topico,
+            bootstrap_servers=['localhost:9092'],
+            auto_offset_reset='earliest',
+            enable_auto_commit=True,
+            group_id='iot-group',
+            value_deserializer=lambda x: json.loads(x.decode('utf-8'))
+        )
+        self.servidor = ServidorSingleton.obtenerInstancia()
+        self.servidor.añadir_observador(ManejadorComprobarAumento())
+
+    def empezar_a_consumir(self):
+        for mensaje in self.consumidor:
+            datos = mensaje.value
+            timestamp = datetime.fromisoformat(datos["timestamp"])
+            temperatura = datos["temperatura"]
+            dato = DatosTemperatura(timestamp, temperatura)
+            self.servidor.notificar(dato)
+            print(f"Recibido: {datos}")
+
+'''if __name__ == '__main__':
+    import sys
+    topico = sys.argv[1]
+    consumidor = Consumidor(topico)
+    consumidor.empezar_a_consumir()'''
+
+# Ejemplo de uso
+server = ServidorSingleton.obtenerInstancia()
+server.añadir_observador(ManejadorCalculoEstadisticos(EstrategiaMediaDesviacion()))
+server.añadir_observador(ManejadorComprobarUmbral(25))
+server.añadir_observador(ManejadorComprobarAumento())
+
+# Simular la recepción de datos
+from time import sleep
+
+for i in range(10):
+    timestamp = datetime.now()
+    temperatura = np.random.uniform(20, 30)
+    dato = DatosTemperatura(timestamp, temperatura)
+    server.notificar(dato)
+    sleep(5) # Esperar 5 segundos antes de recibir el siguiente dato
+
+# Ejemplo de uso
+server = ServidorSingleton.obtenerInstancia()
+server.añadir_observador(ManejadorComprobarAumento())
+
+# Simular la recepción de datos con un rápido aumento de temperatura
+def simular_datos_rapidos():
+    incrementos = [20, 25, 35, 40]  # Valores de temperatura para simular un rápido aumento
+    for incremento in incrementos:
+        timestamp = datetime.now()
+        temperatura = incremento
+        dato = DatosTemperatura(timestamp, temperatura)
+        server.notificar(dato)
+        time.sleep(5)  # Esperar 5 segundos antes de recibir el siguiente dato
+
+# Ejecutar la simulación
+simular_datos_rapidos()
